@@ -5,7 +5,7 @@ namespace VigenereCode.Models
 {
 	public static class MainModel
 	{
-		public static char[] AdjustKeyToInputText(char[] textFromUser, char[] keyFromUser)
+		public static char[] AdjustKeyToInputText(string textFromUser, string keyFromUser)
 		{
 			var onlyRussianLettersArray = textFromUser.Where(ch => IsRussianLetter(ch)).ToArray();
 			var keyAdjustedToInputString = new char[onlyRussianLettersArray.Length];
@@ -37,21 +37,24 @@ namespace VigenereCode.Models
 				var previousRow = vigenereTable[i - 1];
 				var firstLetterFromPreviousRow = vigenereTable[i - 1][0];
 				var currentRow = new char[alphabet.Length];
+				
 				Array.Copy(previousRow, 1, currentRow, 0, previousRow.Length - 1);
+				
 				currentRow[currentRow.Length - 1] = firstLetterFromPreviousRow;
 				vigenereTable[i] = currentRow;
 			}
 			return vigenereTable;
 		}
 
-		public static string Convert(char[] textFromUser, char[] keyFromUser, Operations operation)
+		//char[] to string
+		public static string Convert(string textFromUser, string keyFromUser, Operations operation)
 		{
-			char[] adjustedKey = AdjustKeyToInputText(textFromUser, keyFromUser);
-			char[][] vigenereTable = MakeVigenereTable();
+			var adjustedKey = AdjustKeyToInputText(textFromUser, keyFromUser);
+			var vigenereTable = MakeVigenereTable();
 
-			char[] convertedText = new char[textFromUser.Length];
-			char[] alphabet = vigenereTable[0]; //first row of vigenereTable, where alphabet is
-			int keyIndexer = 0;
+			var convertedText = new char[textFromUser.Length];
+			var alphabet = vigenereTable[0]; //first row of vigenereTable, where alphabet is
+			var keyIndexer = 0;
 
 			for (int i = 0; i < textFromUser.Length; i++)
 			{
@@ -61,23 +64,27 @@ namespace VigenereCode.Models
 				}
 				else
 				{
+					int rowIndexer = Array.IndexOf(alphabet, char.ToLower(adjustedKey[keyIndexer]));
+					
 					if (operation == Operations.Decrypt)
 					{
-						int rowIndexer = Array.IndexOf(alphabet, char.ToLower(adjustedKey[keyIndexer]));
-						var rowWhereEncryptedLetterExist = vigenereTable[rowIndexer]; //the row corresponding to the letter of the key, in which you need to find the column in which it(the encrypted letter) is located and the header of this column will be the original letter
-						int columnIndexer = Array.IndexOf(rowWhereEncryptedLetterExist, char.ToLower(textFromUser[i]));
-						convertedText[i] = char.IsUpper(textFromUser[i]) ? char.ToUpper(alphabet[columnIndexer]) : alphabet[columnIndexer];
-						keyIndexer++;
+						int columnIndexer = Array.IndexOf(vigenereTable[rowIndexer], char.ToLower(textFromUser[i]));
+						convertedText[i] = char.IsUpper(textFromUser[i])
+							? char.ToUpper(alphabet[columnIndexer])
+							: alphabet[columnIndexer];
 					}
 					else
 					{
-						int rowIndexer = Array.IndexOf(alphabet, char.ToLower(adjustedKey[keyIndexer]));
 						int columnIndexer = Array.IndexOf(alphabet, char.ToLower(textFromUser[i]));
-						convertedText[i] = char.IsUpper(textFromUser[i]) ? char.ToUpper(vigenereTable[rowIndexer][columnIndexer]) : vigenereTable[rowIndexer][columnIndexer];
-						keyIndexer++;
+						convertedText[i] = char.IsUpper(textFromUser[i])
+							? char.ToUpper(vigenereTable[rowIndexer][columnIndexer])
+							: vigenereTable[rowIndexer][columnIndexer];
 					}
+					
+					keyIndexer++;
 				}
 			}
+
 			return new string(convertedText);
 		}
 
@@ -91,15 +98,6 @@ namespace VigenereCode.Models
 			=> (c >= 'А' && c <= 'я') || c == 'ё' || c == 'Ё';
 
 		public static bool ContainsOnlyRussianLetters(string s)
-		{
-			foreach (var item in s)
-			{
-				if (!char.IsLetter(item) || !IsRussianLetter(item))
-				{
-					return false;
-				}
-			}
-			return true;
-		}
+			=> s.All(a => char.IsLetter(a) && IsRussianLetter(a));
 	}
 }

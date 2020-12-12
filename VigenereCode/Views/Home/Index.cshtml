@@ -21,10 +21,11 @@
             transition-duration: 0.4s;
             cursor: pointer;
         }
-            button:hover, label:hover {
-                background-color: #007fff;
-                color: white;
-            }
+
+        button:hover, label:hover {
+            background-color: #007fff;
+            color: white;
+        }
     </style>
 
 </head>
@@ -37,9 +38,11 @@
             <label for="fileUpload">
                 Choose file
             </label>
+            <!-- Бесполезная кнопка - что мешает обрабатывать, сразу после выбора файла? -->
             <button type="submit" asp-action="OpenFile" id="tyr">Open file</button>
             <div id="uploadFileName"></div>
         </div>
+        <!-- раз начал наводить красоту, так выделил бы div блоки и подвигал бы их через css, а не через <br> -->
         <br>
         <br>
         <br>

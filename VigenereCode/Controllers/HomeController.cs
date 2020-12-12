@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using System.Linq;
 
 using VigenereCode.Models;
 using VigenereCode.ViewModels;
@@ -35,103 +36,90 @@ namespace VigenereCode.Controllers
             switch (extension)
             {
                 case ".txt":
-                    homeIndexViewModel.SourceText = await Task.Run(() => ReadTxtFile(file));
+                    //бессмысленное использование асинхронности, ты запускаешь асинхронный метод и сразу его ожидаешь
+                    //homeIndexViewModel.SourceText = await Task.Run(() => ReadTxtFile(file));
+                    homeIndexViewModel.SourceText = ReadTxtFile(file);
                     break;
                 case ".docx":
-                    homeIndexViewModel.SourceText = await Task.Run(() => ReadDocxFile(file));
+                    //тоже самое
+                    homeIndexViewModel.SourceText = ReadDocxFile(file);
                     break;
                 default:
                     throw new NotSupportedException();
             }
 
             ModelState.Clear();
+
             return View("Index", homeIndexViewModel);
         }
 
-        public async Task<string> ReadTxtFile(IFormFile file)
+        // заменил Task<string> на string, убрал async
+        public string ReadTxtFile(IFormFile file)
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-            string textFromFile;
-            byte[] arr;
 
-            try
-            {
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    await file.CopyToAsync(ms);
-                    arr = new byte[ms.Length];
-                    ms.Position = 0;
-                    ms.Read(arr, 0, (int)ms.Length);
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
-            
+            //ещё один бесполезный try catch
+
+			using MemoryStream ms = new MemoryStream();
+			//Запускаешь async метод и сразу ожидаешь
+			//await file.CopyToAsync(ms);
+			file.CopyTo(ms);
+
+			var arr = new byte[ms.Length];
+			ms.Position = 0;
+			ms.Read(arr, 0, (int)ms.Length);           
 
             int symbolsCounter = 0;
             int lettersCount = 0;
 
-            textFromFile = Encoding.UTF8.GetString(arr);
+            var textFromFile = Encoding.UTF8.GetString(arr);
 
             foreach (var c in textFromFile)
             {
                 if (char.IsSymbol(c))
-                {
                     symbolsCounter++;
-                }
+                
                 else if (char.IsLetter(c))
-                {
                     lettersCount++;
-                }
             }
 
             if (symbolsCounter > lettersCount)
-            {
                 textFromFile = Encoding.GetEncoding("windows-1251").GetString(arr);
-            }
 
             return textFromFile.Replace("\n", string.Empty).Replace("\r", string.Empty);
         }
 
-        public async Task<string> ReadDocxFile(IFormFile file)
+        //убрал async
+        public string ReadDocxFile(IFormFile file)
         {
-            string textFromFile;
+            //отлавливаешь исключение и сразу отправляешь абсолютно такое же, зачем?
+			
+            using var ms = new MemoryStream();
+			//await file.CopyToAsync(ms);
+			file.CopyTo(ms);
 
-            try
-            {
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    await file.CopyToAsync(ms);
+			using var doc = WordprocessingDocument.Open(ms, false);
+			var wordDocumentText = new StringBuilder();
+			var paragraphElements = doc.MainDocumentPart.Document.Body.Descendants<Paragraph>();
 
-                    using (WordprocessingDocument doc = WordprocessingDocument.Open(ms, false))
-                    {
-                        StringBuilder wordDocumentText = new StringBuilder();
-                        IEnumerable<Paragraph> paragraphElements =
-                            doc.MainDocumentPart.Document.Body.Descendants<Paragraph>();
+            /*
+			foreach (var p in paragraphElements)
+			{
+				var textElements = p.Descendants<Text>();
 
-                        foreach (Paragraph p in paragraphElements)
-                        {
-                            IEnumerable<Text> textElements = p.Descendants<Text>();
+				foreach (var t in textElements)
+					wordDocumentText.Append(t.Text);
 
-                            foreach (Text t in textElements)
-                            {
-                                wordDocumentText.Append(t.Text);
-                            }
+				wordDocumentText.AppendLine();
+			}*/
 
-                            wordDocumentText.AppendLine();
-                        }
-                        textFromFile = wordDocumentText.ToString();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
-            
-            return textFromFile.Replace("\n", string.Empty).Replace("\r", string.Empty);
+            foreach (var p in paragraphElements)
+			{
+                var text = string.Join("", p.Descendants<Text>().Select(a => a.Text));
+                wordDocumentText.AppendLine(text);
+			}
+
+            return wordDocumentText.Replace("\n", string.Empty).Replace("\r", string.Empty).ToString();
         }
 
         public async Task<IActionResult> Convert(HomeIndexViewModel homeIndexViewModel, string command)
@@ -148,19 +136,14 @@ namespace VigenereCode.Controllers
                 return View("Index", homeIndexViewModel);
             }
 
-            MainModel.Operations operation;
+            var operation = command == "Encrypt"
+                ? MainModel.Operations.Encrypt
+                : MainModel.Operations.Decrypt;
 
-            if (command == "Encrypt")
-            {
-                operation = MainModel.Operations.Encrypt;
-            }
-            else
-            {
-                operation = MainModel.Operations.Decrypt;
-            }
-
-            homeIndexViewModel.Result = await Task.Run(() => MainModel.Convert(homeIndexViewModel.SourceText.ToCharArray(), homeIndexViewModel.Key.ToCharArray(), operation));
+            //опять await
+            homeIndexViewModel.Result = MainModel.Convert(homeIndexViewModel.SourceText, homeIndexViewModel.Key, operation);
             ModelState.Clear();
+
             return View("Index", homeIndexViewModel);
         }
 
@@ -172,15 +155,18 @@ namespace VigenereCode.Controllers
                 return View("Index", homeIndexViewModel);
             }
 
-            string fileName = string.IsNullOrEmpty(homeIndexViewModel.DownloadFileName) ? "Result" : homeIndexViewModel.DownloadFileName;
+            var fileName = string.IsNullOrEmpty(homeIndexViewModel.DownloadFileName)
+                ? "Result"
+                : homeIndexViewModel.DownloadFileName;
 
             switch (command)
             {
                 case "downloadTxtFile":
-                    return await Task.Run(() => DownloadTxtFile(homeIndexViewModel.Result, fileName));
+                    //опять await
+                    return DownloadTxtFile(homeIndexViewModel.Result, fileName);
 
                 case "downloadDocxFile":
-                    return await Task.Run(() => DownloadDocxFile(homeIndexViewModel.Result, fileName));
+                    return DownloadDocxFile(homeIndexViewModel.Result, fileName);
 
                 default:
                     throw new NotSupportedException();
@@ -190,46 +176,61 @@ namespace VigenereCode.Controllers
 
         public FileContentResult DownloadTxtFile(string text, string fileName)
         {
+            //Ты отлавливаешь исключения, чтобы кинуть такоеже исключение ???
+            /*
             try
             {
-                using (MemoryStream ms = new MemoryStream(Encoding.UTF8.GetBytes(text)))
-                {
-                    return File(ms.ToArray(), "text/plain; charset=utf-8", fileName + ".txt");
-                }
-            }
+				using var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
+				return File(ms.ToArray(), "text/plain; charset=utf-8", fileName + ".txt");
+			}
             catch (Exception ex)
             {
-
                 throw new Exception(ex.Message);
             }
-           
+            */
+
+            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
+            return File(ms.ToArray(), "text/plain; charset=utf-8", fileName + ".txt");
         }
 
         public FileContentResult DownloadDocxFile(string text, string fileName)
         {
+            /*
             try
             {
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    using (WordprocessingDocument wordDocument = WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
-                    {
-                        MainDocumentPart mainPart = wordDocument.AddMainDocumentPart();
-                        mainPart.Document = new Document();
-                        Body body = mainPart.Document.AppendChild(new Body());
-                        Paragraph para = body.AppendChild(new Paragraph());
-                        Run run = para.AppendChild(new Run());
-                        run.AppendChild(new Text(text));
-                        wordDocument.Close();
-                        ms.Position = 0;
-                        return File(ms.ToArray(), "application/vnd.openxmlformats", fileName + ".docx");
-                    }
-                }
-            }
+				using MemoryStream ms = new MemoryStream();
+				using WordprocessingDocument wordDocument = WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document);
+				
+                MainDocumentPart mainPart = wordDocument.AddMainDocumentPart();
+				mainPart.Document = new Document();
+				Body body = mainPart.Document.AppendChild(new Body());
+				Paragraph para = body.AppendChild(new Paragraph());
+				Run run = para.AppendChild(new Run());
+				run.AppendChild(new Text(text));
+				wordDocument.Close();
+				ms.Position = 0;
+				return File(ms.ToArray(), "application/vnd.openxmlformats", fileName + ".docx");
+			}
             catch (Exception ex)
             {
 
                 throw new Exception(ex.Message);
             }
+            */
+
+            using var ms = new MemoryStream();
+            using var wordDocument = WordprocessingDocument.Create(ms, DocumentFormat.OpenXml.WordprocessingDocumentType.Document);
+
+            var mainPart = wordDocument.AddMainDocumentPart();
+            mainPart.Document = new Document();
+            var body = mainPart.Document.AppendChild(new Body());
+            var para = body.AppendChild(new Paragraph());
+            var run = para.AppendChild(new Run());
+            run.AppendChild(new Text(text));
+            wordDocument.Close();
+            ms.Position = 0;
+           
+            return File(ms.ToArray(), "application/vnd.openxmlformats", fileName + ".docx");
         }
     }
 }
